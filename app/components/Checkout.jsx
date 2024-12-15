@@ -1,10 +1,13 @@
-import React, { useState } from "react";
+import Link from "next/link";
+import { useState } from "react";
+import { product } from "../libs/product";
 
 const Checkout = () => {
   const [quantity, setQuantity] = useState(1);
+  const [paymentUrl, setPaymentUrl] = useState("");
 
   const decreaseQuantity = () => {
-    setQuantity((prevState) => (quantity > 1 ? prevState - 1 : null));
+    setQuantity((prevState) => (prevState > 1 ? prevState - 1 : 1));
   };
 
   const increaseQuantity = () => {
@@ -12,11 +15,63 @@ const Checkout = () => {
   };
 
   const checkout = async () => {
-    alert("Checkout SNAP! 🌟")
+    const data = {
+      id: product.id,
+      productName: product.name,
+      price: product.price,
+      quantity: quantity,
+    };
+
+    const response = await fetch("/api/tokenizer/", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+
+    const requestData = await response.json();
+    window.snap.pay(requestData.token);
   };
 
   const generatePaymentLink = async () => {
-    alert("Checkout Payment Link! 🔥")
+    const secret = process.env.NEXT_PUBLIC_SECRET;
+    const encodedSecret = btoa(secret); // Gunakan btoa untuk base64 encoding
+    const basicAuth = `Basic ${encodedSecret}`;
+
+    let data = {
+      item_details: [
+        {
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          quantity: quantity,
+        },
+      ],
+      transaction_details: {
+        order_id: product.id,
+        gross_amount: product.price * quantity,
+      },
+    };
+
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API}/v1/payment-links`,
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: basicAuth,
+        },
+        body: JSON.stringify(data),
+      }
+    );
+
+    const paymentLink = await response.json();
+    console.log("Response API:", paymentLink);
+
+    if (paymentLink && paymentLink.payment_url) {
+      setPaymentUrl(paymentLink.payment_url);
+    } else {
+      console.error("payment_url tidak ditemukan di respons API.");
+    }
   };
 
   return (
@@ -35,7 +90,7 @@ const Checkout = () => {
             id="quantity"
             value={quantity}
             className="h-10 w-16 text-black border-transparent text-center"
-            onChange={quantity}
+            onChange={(e) => setQuantity(Number(e.target.value))}
           />
 
           <button
@@ -58,6 +113,15 @@ const Checkout = () => {
       >
         Create Payment Link
       </button>
+      <div className="text-black underline italic">
+        {paymentUrl ? (
+          <Link href={paymentUrl} target="_blank" rel="noopener noreferrer">
+            KLIK DISINI UNTUK MELAKUKAN PEMBAYARAN
+          </Link>
+        ) : (
+          <p>Memuat URL pembayaran...</p>
+        )}
+      </div>
     </>
   );
 };
